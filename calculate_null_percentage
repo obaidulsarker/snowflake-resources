@@ -1,0 +1,44 @@
+# This procedure calculate the percentage of NULL of a give table.
+
+CREATE OR REPLACE PROCEDURE calculate_null_percentage(table_name STRING)
+RETURNS TABLE(column_name STRING, null_percentage FLOAT)
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.8'
+HANDLER = 'calculate_null_percentage'
+PACKAGES = ('snowflake-snowpark-python')
+AS
+$$
+from snowflake.snowpark import Session
+from snowflake.snowpark.functions import col
+
+def calculate_null_percentage(session: Session, table_name: str):
+    # Initialize an empty list to store results
+    result = []
+    
+    # Query the column names from the specified table
+    columns_query = f"SHOW COLUMNS IN TABLE {table_name}"
+    columns_df = session.sql(columns_query).collect()
+    
+    # Loop over each column and calculate NULL percentage
+    for column in columns_df:
+        column_name = column['column_name']
+        
+        # Get total and null count for each column
+        total_count = session.table(table_name).count()
+        null_count = session.table(table_name).filter(col(column_name).is_null()).count()
+        
+        # Calculate the NULL percentage
+        if total_count > 0:
+            null_percentage = (null_count / total_count) * 100
+        else:
+            null_percentage = None  # To handle divide by zero case if total_count is zero
+            
+        # Append result in list format (column_name, null_percentage)
+        result.append((column_name, null_percentage))
+    
+    # Return the result in tabular format
+    return session.create_dataframe(result, schema=["column_name", "null_percentage"])
+$$;
+
+# Test the procedure
+CALL calculate_null_percentage('WINERY.PUBLIC.WINE');
